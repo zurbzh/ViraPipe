@@ -5,16 +5,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import scala.Tuple2;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -100,10 +96,15 @@ public class BlastN {
             String fname = f.next();
             System.out.println("fname: " + fname);
             String blastn_cmd;
+
+	    Path srcInHdfs = new Path(fname);
+	    Path destInTmp = new Path("file:///tmp/" + srcInHdfs.getName());
+	    fs.copyToLocalFile(false, srcInHdfs, destInTmp);
+	    
             if(task.equalsIgnoreCase("megablast"))
-                blastn_cmd = "hdfs dfs -text "+fname+" | blastn -db "+db+" -num_threads "+num_threads+" -task megablast -word_size "+word_size+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
+                blastn_cmd = "cat /tmp/"+srcInHdfs.getName()+" | blastn -db "+db+" -num_threads "+num_threads+" -task megablast -word_size "+word_size+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
             else
-                blastn_cmd = "hdfs dfs -text "+fname+" | blastn -db "+db+" -num_threads "+num_threads+" -word_size "+word_size+" -gapopen "+gapopen+" -gapextend "+gapextend+" -penalty "+penalty+" -reward "+reward+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
+                blastn_cmd = "cat /tmp/"+srcInHdfs.getName()+" | blastn -db "+db+" -num_threads "+num_threads+" -word_size "+word_size+" -gapopen "+gapopen+" -gapextend "+gapextend+" -penalty "+penalty+" -reward "+reward+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
 
             System.out.println(blastn_cmd);
 
@@ -127,6 +128,14 @@ public class BlastN {
 
             process.waitFor();
             in.close();
+
+            File fLocal = new File("/tmp/"+srcInHdfs.getName());
+	    try {
+		fLocal.delete();
+	    } catch (SecurityException ex) {
+		System.err.println("Could not delete local file:/tmp/"+srcInHdfs.getName());
+	    }
+	    
             return out.iterator();
         });
 

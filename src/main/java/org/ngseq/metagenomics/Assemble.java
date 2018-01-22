@@ -102,7 +102,13 @@ public class Assemble {
         String fname = path.substring(path.lastIndexOf("/"), path.lastIndexOf("."));
         String tempName = String.valueOf((new Date()).getTime());
 
-      String ass_cmd = "hdfs dfs -text " + path + " | megahit -t" + t + " -m" + m + " --12 /dev/stdin -o "+localdir+"/"+tempName;
+      Path srcInHdfs = new Path(path);
+      Path destInTmp = new Path("file://"  + localdir + "/" + tempName + fname);
+      fs.copyToLocalFile(false, srcInHdfs, destInTmp);
+	
+	
+	//      String ass_cmd = "hdfs dfs -text " + path + " | megahit -t" + t + " -m" + m + " --12 /dev/stdin -o "+localdir+"/"+tempName;
+      String ass_cmd = "cat " + localdir + "/" + tempName + fname + " | megahit -t" + t + " -m" + m + " --12 /dev/stdin -o "+localdir+"/"+tempName;	
       System.out.println(ass_cmd);
 
       ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", ass_cmd);
@@ -116,36 +122,42 @@ public class Assemble {
         out.add(e);
       }
       process.waitFor();
+
+      Path destInHdfs = new Path(path);
+      Path srcInTmp = new Path("file://"  + localdir + "/" + tempName);
+      // CopyFromLocalFsToHDFS - > deleteFromLocalFs=true, overwrite=true
+      fs.copyFromLocalFile(true, true, srcInTmp, destInHdfs);
+	
     //TODO:Pipe commands to copy from loca to HDFS and remove local temp
 
-      String copy_cmd = "hdfs dfs -put "+localdir+"/"+tempName+" "+ outDir+"/"+fname;
+      // String copy_cmd = "hdfs dfs -put "+localdir+"/"+tempName+" "+ outDir+"/"+fname;
 
-      ProcessBuilder pb2 = new ProcessBuilder("/bin/sh", "-c", copy_cmd, "chmod -R 777 "+ outDir);
-      Process process2 = pb2.start();
+      // ProcessBuilder pb2 = new ProcessBuilder("/bin/sh", "-c", copy_cmd, "chmod -R 777 "+ outDir);
+      // Process process2 = pb2.start();
 
-      BufferedReader err2 = new BufferedReader(new InputStreamReader(process2.getErrorStream()));
-      String e2;
-      while ((e2 = err2.readLine()) != null) {
-        System.out.println(e2);
-        out.add(e2);
-      }
-      process2.waitFor();
+      // BufferedReader err2 = new BufferedReader(new InputStreamReader(process2.getErrorStream()));
+      // String e2;
+      // while ((e2 = err2.readLine()) != null) {
+      //   System.out.println(e2);
+      //   out.add(e2);
+      // }
+      // process2.waitFor();
 
-      String delete_cmd = "rm -rf "+localdir+"/"+tempName;
+      // String delete_cmd = "rm -rf "+localdir+"/"+tempName + "*";
 
-      ProcessBuilder pb3 = new ProcessBuilder("/bin/sh", "-c", delete_cmd);
-      Process process3 = pb3.start();
-      BufferedReader err3 = new BufferedReader(new InputStreamReader(process3.getErrorStream()));
-      String e3;
-      while ((e3 = err3.readLine()) != null) {
-        System.out.println(e3);
-        out.add(e3);
-      }
-      process3.waitFor();
+      // ProcessBuilder pb3 = new ProcessBuilder("/bin/sh", "-c", delete_cmd);
+      // Process process3 = pb3.start();
+      // BufferedReader err3 = new BufferedReader(new InputStreamReader(process3.getErrorStream()));
+      // String e3;
+      // while ((e3 = err3.readLine()) != null) {
+      //   System.out.println(e3);
+      //   out.add(e3);
+      // }
+      // process3.waitFor();
 
       out.add(ass_cmd);
-      out.add(copy_cmd);
-      out.add(delete_cmd);
+	//      out.add(copy_cmd);
+	//      out.add(delete_cmd);
 
       return out.iterator();
     });

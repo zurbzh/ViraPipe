@@ -110,10 +110,16 @@ public class BlastNFilter {
 
             System.out.println("fname: " + fname);
             String blastn_cmd;
+
+	    Path srcInHdfs = new Path(fname);
+	    Path destInTmp = new Path("file:///tmp/" + srcInHdfs.getName());
+	    fs.copyToLocalFile(false, srcInHdfs, destInTmp);
+            
+	    
             if (task.equalsIgnoreCase("megablast"))
-                blastn_cmd = "hdfs dfs -text " + fname + " | blastn -db " + db + " -num_threads "+num_threads+" -task megablast -word_size " + word_size + " -max_target_seqs " + max_target_seqs + " -evalue " + evalue + " " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt " + outfmt;
+                blastn_cmd = "cat /tmp/" + srcInHdfs.getName() + " | blastn -db " + db + " -num_threads "+num_threads+" -task megablast -word_size " + word_size + " -max_target_seqs " + max_target_seqs + " -evalue " + evalue + " " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt " + outfmt;
             else
-                blastn_cmd = "hdfs dfs -text " + fname + " | blastn -db " + db + " -num_threads "+num_threads+" -word_size " + word_size + " -gapopen " + gapopen + " -gapextend " + gapextend + " -penalty " + penalty + " -reward " + reward + " -max_target_seqs " + max_target_seqs + " -evalue " + evalue + " " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt " + outfmt;
+                blastn_cmd = "cat /tmp/" + srcInHdfs.getName() + " | blastn -db " + db + " -num_threads "+num_threads+" -word_size " + word_size + " -gapopen " + gapopen + " -gapextend " + gapextend + " -penalty " + penalty + " -reward " + reward + " -max_target_seqs " + max_target_seqs + " -evalue " + evalue + " " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt " + outfmt;
 
             System.out.println(blastn_cmd);
 
