@@ -5,6 +5,11 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.DFSInputStream;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -13,6 +18,11 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import org.apache.spark.broadcast.Broadcast;
+import scala.Tuple2;
+
+import java.io.*;
+import java.net.URI;
 import java.util.ArrayList;
 
 /**
@@ -39,10 +49,11 @@ public class BlastN {
         options.addOption(new Option( "evalue", true, "" ));
         options.addOption(new Option( "show_gis", "" ));
         options.addOption(new Option( "outfmt", true, "" ));
-        options.addOption(new Option( "db", true, "" ));
+        options.addOption(new Option( "db", true, "Path to local BlastNT database (database must be available on every node under the same path)" ));
         options.addOption(new Option( "task", true, "" ));
         options.addOption(new Option( "num_threads", true, "" ));
         options.addOption(new Option( "taxname", true, "Use Blast taxonomy names for filtering e.g. viruses, bacteria, archaea" ));
+        options.addOption(  new Option( "bin", true,"Path to blastn binary, defaults calls 'blastn'" ) );
 
         HelpFormatter formatter = new HelpFormatter();
         formatter.printHelp( "spark-submit <spark specific args>", options, true );
@@ -68,10 +79,12 @@ public class BlastN {
         double evalue = (cmd.hasOption("evalue")==true)? Double.valueOf(cmd.getOptionValue("evalue")):0.001;
         boolean show_gis = cmd.hasOption("show_gis");
         String outfmt = (cmd.hasOption("outfmt")==true)? cmd.getOptionValue("outfmt"): "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sscinames sskingdoms";
-        String db = (cmd.hasOption("db")==true)? cmd.getOptionValue("db"):"/mnt/hdfs/1/Index_blastn/nt";
+        String db = (cmd.hasOption("db")==true)? cmd.getOptionValue("db"):null;
         String task = (cmd.hasOption("task")==true)? cmd.getOptionValue("task"):"blastn";
         int num_threads = (cmd.hasOption("num_threads")==true)? Integer.valueOf(cmd.getOptionValue("num_threads")):1;
         String taxname = (cmd.hasOption("taxname")==true)? cmd.getOptionValue("taxname"):"";
+        String bin = (cmd.hasOption("bin")==true)? cmd.getOptionValue("bin"):"blastn";
+
 
         SparkConf conf = new SparkConf().setAppName("BlastN");
         JavaSparkContext sc = new JavaSparkContext(conf);
@@ -91,31 +104,46 @@ public class BlastN {
         }
 
         JavaRDD<String> fastaFilesRDD = sc.parallelize(splitFileList, splitFileList.size());
+        Broadcast<String> bs = sc.broadcast(fs.getUri().toString());
         JavaRDD<String> outRDD = fastaFilesRDD.mapPartitions(f -> {
             Process process;
             String fname = f.next();
-            System.out.println("fname: " + fname);
+            DFSClient client = new DFSClient(URI.create(bs.getValue()), new Configuration());
+            DFSInputStream hdfsstream = client.open(fname);
             String blastn_cmd;
 
 	    Path srcInHdfs = new Path(fname);
 	    Path destInTmp = new Path("file:///tmp/" + srcInHdfs.getName());
 	    fs.copyToLocalFile(false, srcInHdfs, destInTmp);
-	    
+
+//                blastn_cmd = "cat /tmp/"+srcInHdfs.getName()+" | blastn -db "+db+" -num_threads "+num_threads+" -task megablast -word_size "+word_size+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
+//            else
+//                blastn_cmd = "cat /tmp/"+srcInHdfs.getName()+" | blastn -db "+db+" -num_threads "+num_threads+" -word_size "+word_size+" -gapopen "+gapopen+" -gapextend "+gapextend+" -penalty "+penalty+" -reward "+reward+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
+      
             if(task.equalsIgnoreCase("megablast"))
-                blastn_cmd = "cat /tmp/"+srcInHdfs.getName()+" | blastn -db "+db+" -num_threads "+num_threads+" -task megablast -word_size "+word_size+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
+                blastn_cmd = bin+" -db "+db+" -num_threads "+num_threads+" -task megablast -word_size "+word_size+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
             else
-                blastn_cmd = "cat /tmp/"+srcInHdfs.getName()+" | blastn -db "+db+" -num_threads "+num_threads+" -word_size "+word_size+" -gapopen "+gapopen+" -gapextend "+gapextend+" -penalty "+penalty+" -reward "+reward+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
+                blastn_cmd = bin+" -db "+db+" -num_threads "+num_threads+" -word_size "+word_size+" -gapopen "+gapopen+" -gapextend "+gapextend+" -penalty "+penalty+" -reward "+reward+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
 
             System.out.println(blastn_cmd);
 
             ProcessBuilder pb = new ProcessBuilder("/bin/bash", "-c", blastn_cmd);
             process = pb.start();
 
-            BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            BufferedReader hdfsinput = new BufferedReader(new InputStreamReader(hdfsstream));
+            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
             String line;
+            while ((line = hdfsinput.readLine()) != null) {
+                writer.write(line);
+                writer.newLine();
+            }
+            writer.close();
+
+            BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String bline;
             ArrayList<String> out = new ArrayList<String>();
-            while ((line = in.readLine()) != null) {
-                out.add(line);
+            while ((bline = in.readLine()) != null) {
+                out.add(bline);
             }
 
             /*
@@ -125,8 +153,6 @@ public class BlastN {
                 out.add(e);
             }
             */
-
-            process.waitFor();
             in.close();
 
             File fLocal = new File("/tmp/"+srcInHdfs.getName());
