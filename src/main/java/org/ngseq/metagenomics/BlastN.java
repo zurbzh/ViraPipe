@@ -108,14 +108,20 @@ public class BlastN {
         JavaRDD<String> outRDD = fastaFilesRDD.mapPartitions(f -> {
             Process process;
             String fname = f.next();
+
+//	    Path srcInHdfs = new Path(fname);
+//	    Path destInTmp = new Path("file:///tmp/" + srcInHdfs.getName());
+//	    fs.copyToLocalFile(false, srcInHdfs, destInTmp);
+
+            JavaRDD<String> srcInHdfs = sc.textFile(fname);
+            String filename = fname.substring(fname.lastIndexOf("/"));
+            srcInHdfs.saveAsTextFile("file:///tmp/" + filename);
+
+      
             DFSClient client = new DFSClient(URI.create(bs.getValue()), new Configuration());
             DFSInputStream hdfsstream = client.open(fname);
             String blastn_cmd;
-
-	    Path srcInHdfs = new Path(fname);
-	    Path destInTmp = new Path("file:///tmp/" + srcInHdfs.getName());
-	    fs.copyToLocalFile(false, srcInHdfs, destInTmp);
-
+      
 //                blastn_cmd = "cat /tmp/"+srcInHdfs.getName()+" | blastn -db "+db+" -num_threads "+num_threads+" -task megablast -word_size "+word_size+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
 //            else
 //                blastn_cmd = "cat /tmp/"+srcInHdfs.getName()+" | blastn -db "+db+" -num_threads "+num_threads+" -word_size "+word_size+" -gapopen "+gapopen+" -gapextend "+gapextend+" -penalty "+penalty+" -reward "+reward+" -max_target_seqs "+max_target_seqs+" -evalue "+evalue+" " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt "+outfmt;
@@ -155,12 +161,12 @@ public class BlastN {
             */
             in.close();
 
-            File fLocal = new File("/tmp/"+srcInHdfs.getName());
-	    try {
-		fLocal.delete();
-	    } catch (SecurityException ex) {
-		System.err.println("Could not delete local file:/tmp/"+srcInHdfs.getName());
-	    }
+            File fLocal = new File("/tmp/"+filename);
+            try {
+             fLocal.delete();
+            } catch (SecurityException ex) {
+              System.err.println("Could not delete local file:/tmp/" + filename);
+            }
 	    
             return out.iterator();
         });

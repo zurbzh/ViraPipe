@@ -1,5 +1,6 @@
 package org.ngseq.metagenomics;
 
+import io.hops.VirapipeHopsPipeline;
 import org.apache.commons.cli.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -17,6 +18,8 @@ import java.io.*;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Usage
@@ -31,9 +34,11 @@ import java.util.Date;
  * metagenomics-0.9-jar-with-dependencies.jar -in ${OUTPUT_PATH}/${PROJECT_NAME}_groupped -out
  * ${OUTPUT_PATH}/${PROJECT_NAME}_assembled -localdir ${LOCAL_TEMP_PATH} -merge -t ${ASSEMBLER_THREADS}
  * <p>
- *
+ * <p>
  */
 public class Assemble {
+
+  private static final Logger logger = Logger.getLogger(Assemble.class.getName());
 
   public static void main(String[] args) throws IOException {
     SparkConf conf = new SparkConf().setAppName("Assemble");
@@ -112,6 +117,7 @@ public class Assemble {
     JavaRDD<String> splitFilesRDD = sc.parallelize(splitFileList, splitFileList.size());
     Broadcast<String> bs = sc.broadcast(fs.getUri().toString());
     JavaRDD<String> outRDD = splitFilesRDD.mapPartitions(f -> {
+
       String path = f.next();
       System.out.println(path);
       String fname;
@@ -121,14 +127,20 @@ public class Assemble {
         fname = path.substring(path.lastIndexOf("/") + 1, path.lastIndexOf("."));
       }
 
+      
       String tempName = String.valueOf((new Date()).getTime());
-
-      DFSClient client = new DFSClient(URI.create(bs.getValue()), new Configuration());
-      DFSInputStream hdfsstream = client.open(path);
 
       Path srcInHdfs = new Path(path);
       Path destInTmp = new Path("file://" + localdir + "/" + tempName + fname);
-      fs.copyToLocalFile(false, srcInHdfs, destInTmp);
+      FileSystem myFs = FileSystem.get(new Configuration());
+      myFs.copyToLocalFile(false, srcInHdfs, destInTmp);
+      myFs.close();
+
+//      JavaRDD<String> hdfsFile = sc.textFile(path);
+//      hdfsFile.saveAsTextFile(localdir + "/" + tempName + fname);
+
+      DFSClient client = new DFSClient(URI.create(bs.getValue()), new Configuration());
+      DFSInputStream hdfsstream = client.open(path);
 
       //      String ass_cmd = "hdfs dfs -text " + path + " | megahit -t" + t + " -m" + m + " --12 /dev/stdin -o "+localdir+"/"+tempName;
       String ass_cmd = "cat " + localdir + "/" + tempName + fname + " | megahit -t" + t + " -m" + m
@@ -142,8 +154,12 @@ public class Assemble {
       BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
       String line;
       while ((line = hdfsinput.readLine()) != null) {
-        writer.write(line);
-        writer.newLine();
+        try {
+          writer.write(line);
+          writer.newLine();
+        } catch (IOException e) {
+          logger.log(Level.SEVERE, "Cant copy from hdfs stream to local stream: {0}", e.getMessage());
+        }
       }
       writer.close();
 
@@ -162,10 +178,17 @@ public class Assemble {
       }
       process.waitFor();
 
-      Path destInHdfs = new Path(outDir+"/"+fname);
-      Path srcInTmp = new Path("file://" + localdir + "/" + tempName);
+//      Path destInHdfs = new Path(outDir + "/" + fname);
+//      Path srcInTmp = new Path("file://" + localdir + "/" + tempName);
       // CopyFromLocalFsToHDFS - > deleteFromLocalFs=true, overwrite=true
-      fs.copyFromLocalFile(true, true, srcInTmp, destInHdfs);
+
+//      JavaRDD<String> localOutFile = sc.textFile(srcInTmp.toUri().toURL().toString());
+
+
+//      JavaRDD<String> localOutFile = sc.textFile("file://" + localdir + "/" + tempName);
+//      localOutFile.saveAsTextFile(outDir + "/" + fname);
+
+//      myFs.copyFromLocalFile(true, true, srcInTmp, destInHdfs);
 
       //TODO:Pipe commands to copy from loca to HDFS and remove local temp
       // String copy_cmd = "hdfs dfs -put "+localdir+"/"+tempName+" "+ outDir+"/"+fname;

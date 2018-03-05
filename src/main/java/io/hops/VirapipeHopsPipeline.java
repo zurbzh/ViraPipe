@@ -5,7 +5,7 @@
  */
 package io.hops;
 
-import io.hops.util.HopsUtil;
+import io.hops.security.HopsUtil;
 import java.util.logging.Logger;
 import org.apache.spark.sql.SparkSession;
 
@@ -15,10 +15,10 @@ public class VirapipeHopsPipeline {
 
   public static void main(String[] args) {
 
-    SparkSession spark = SparkSession
-        .builder()
-        .appName(HopsUtil.getJobName())
-        .getOrCreate();
+//    SparkSession spark = SparkSession
+//        .builder()
+//        .appName(HopsUtil.getJobName())
+//        .getOrCreate();
 
 //    try {
 //
