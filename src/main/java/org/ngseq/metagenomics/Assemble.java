@@ -5,6 +5,8 @@ import org.apache.commons.cli.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSClient;
@@ -51,17 +53,16 @@ public class Assemble {
     Option kOpt = new Option("m", true, "fraction of memory to be used per process");
     Option ouOpt = new Option("out", true, "");
 
-    options.addOption(new Option("localdir", true, "Absolute path to local temp dir"));
-    options.addOption(new Option("merge", "Merge output"));
-    options.addOption(new Option("subdirs", "Read from subdirectories"));
-    options.addOption(new Option("debug", "saves error log"));
-    options.addOption(new Option("bin", true, "Path to megahit binary, defaults calls 'megahit'"));
-    options.addOption(new Option("single", "Single reads option, default is interleaved paired-end"));
-
-    options.addOption(splitOpt);
-    options.addOption(cOpt);
-    options.addOption(kOpt);
-    options.addOption(ouOpt);
+    options.addOption(new Option( "localdir", true, "Absolute path to local temp dir ( YARN must have write permissions if YARN used)"));
+    options.addOption(new Option( "merge", "Merge output"));
+    options.addOption(  new Option( "subdirs", "Read from subdirectories" ) );
+    options.addOption(  new Option( "debug", "saves error log" ) );
+    options.addOption(  new Option( "bin", true,"Path to megahit binary, defaults calls 'megahit'" ) );
+    options.addOption(  new Option( "single", "Single reads option, default is interleaved paired-end" ) );
+    options.addOption( splitOpt );
+    options.addOption( cOpt );
+    options.addOption( kOpt );
+    options.addOption( ouOpt );
 
     HelpFormatter formatter = new HelpFormatter();
     formatter.printHelp("spark-submit <spark specific args>", options, true);
@@ -87,7 +88,7 @@ public class Assemble {
     boolean mergeout = cmd.hasOption("merge");
 
     FileSystem fs = FileSystem.get(new Configuration());
-    if (!fs.isDirectory(new Path(outDir))) {
+    if (!fs.isDirectory(new Path(outDir),new FsPermission(FsAction.ALL,FsAction.ALL,FsAction.ALL))) {
       fs.mkdirs(new Path(outDir));
     }
 
@@ -145,6 +146,7 @@ public class Assemble {
       //      String ass_cmd = "hdfs dfs -text " + path + " | megahit -t" + t + " -m" + m + " --12 /dev/stdin -o "+localdir+"/"+tempName;
       String ass_cmd = "cat " + localdir + "/" + tempName + fname + " | megahit -t" + t + " -m" + m
           + " --12 /dev/stdin -o " + localdir + "/" + tempName;
+      //      String ass_cmd = bin+" -t" + t + " -m" + m + " "+readstype+" /dev/stdin -o "+localdir+"/"+tempName; //YARN must have write permission to localdir
       System.out.println(ass_cmd);
 
       ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", ass_cmd);
@@ -183,6 +185,10 @@ public class Assemble {
       // CopyFromLocalFsToHDFS - > deleteFromLocalFs=true, overwrite=true
 
 //      JavaRDD<String> localOutFile = sc.textFile(srcInTmp.toUri().toURL().toString());
+
+      //      String copy_cmd = System.getenv("HADOOP_HOME")+"/bin/hdfs dfs -put "+localdir+"/"+tempName+" "+outDir+"/megahit_"+fname; //YARN should have write permissions to /tmp in HDFS
+      //	ProcessBuilder pb2 = new ProcessBuilder("/bin/sh", "-c", copy_cmd);
+      //      Process process2 = pb2.start();
 
 
 //      JavaRDD<String> localOutFile = sc.textFile("file://" + localdir + "/" + tempName);
@@ -229,14 +235,17 @@ public class Assemble {
 
       FileStatus[] dirs = fs.listStatus(new Path(outDir));
       for (FileStatus dir : dirs) {
-        FileStatus[] st = fs.listStatus(dir.getPath());
-        for (int i = 0; i < st.length; i++) {
-          String fn = st[i].getPath().getName().toString();
-          if (fn.endsWith(".fasta") || fn.endsWith(".fa")) {
-            String dst = outDir + "/" + dir.getPath().getName() + "_" + st[i].getPath().getName();
-            FileUtil.copy(fs, st[i].getPath(), fs, new Path(dst), false, new Configuration());
-          }
-        }
+	  if(dir.getPath().getName().toString().startsWith("megahit")){	  
+	      FileStatus[] st = fs.listStatus(dir.getPath());
+	      for (int i = 0; i < st.length; i++) {
+		  String fn = st[i].getPath().getName().toString();
+		  if (fn.endsWith(".fasta") || fn.endsWith(".fa")) {
+		      String dst = outDir + "/" + dir.getPath().getName() + "_" + st[i].getPath().getName();
+		      FileUtil.copy(fs, st[i].getPath(), fs, new Path(dst), false, new Configuration());
+		  }
+	      }
+	      fs.delete(dir.getPath(), true);	
+	  }
       }
     }
 
