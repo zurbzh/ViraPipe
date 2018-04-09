@@ -88,7 +88,8 @@ public class Assemble {
     boolean mergeout = cmd.hasOption("merge");
 
     FileSystem fs = FileSystem.get(new Configuration());
-    if (!fs.isDirectory(new Path(outDir),new FsPermission(FsAction.ALL,FsAction.ALL,FsAction.ALL))) {
+    if (!fs.isDirectory(new Path(outDir))) {
+	//if (!fs.isDirectory(new Path(outDir),new FsPermission(FsAction.ALL,FsAction.ALL,FsAction.ALL))) {
       fs.mkdirs(new Path(outDir));
     }
 
