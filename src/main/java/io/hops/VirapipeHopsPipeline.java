@@ -5,7 +5,6 @@
  */
 package io.hops;
 
-import io.hops.security.HopsUtil;
 import java.util.logging.Logger;
 import org.apache.spark.sql.SparkSession;
 
