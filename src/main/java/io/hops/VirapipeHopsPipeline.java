@@ -6,7 +6,6 @@
 package io.hops;
 
 import java.util.logging.Logger;
-import org.apache.spark.sql.SparkSession;
 
 public class VirapipeHopsPipeline {
 
