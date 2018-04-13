@@ -153,7 +153,7 @@ public class Assemble {
       ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", ass_cmd);
       Process process = pb.start();
 
-      BufferedReader hdfsinput = new BufferedReader(new InputStreamReader(hdfsstream));
+      BufferedReader hdfsinput = new BufferedReader(new InputStreamReader(myFs.open(srcInHdfs)));
       BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
       String line;
       while ((line = hdfsinput.readLine()) != null) {
