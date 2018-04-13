@@ -1,7 +1,7 @@
 package org.ngseq.metagenomics;
 
-import io.hops.VirapipeHopsPipeline;
 import org.apache.commons.cli.*;
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -11,6 +11,7 @@ import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSInputStream;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -20,27 +21,16 @@ import java.io.*;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
-/**
- * Usage
- * spark-submit --master local[${NUM_EXECUTORS}] --executor-memory 20g --class org.ngseq.metagenomics.Assemble
- * metagenomics-0.9-jar-with-dependencies.jar -in ${OUTPUT_PATH}/${PROJECT_NAME}_groupped -out
- * ${OUTPUT_PATH}/${PROJECT_NAME}_assembled -localdir ${LOCAL_TEMP_PATH} -merge -t ${ASSEMBLER_THREADS}
- * <p>
- * spark-submit --master yarn --deploy-mode ${DEPLOY_MODE} --conf spark.dynamicAllocation.enabled=true --conf
- * spark.dynamicAllocation.cachedExecutorIdleTimeout=100 --conf spark.shuffle.service.enabled=true --conf
- * spark.scheduler.mode=${SCHEDULER_MODE} --conf spark.task.maxFailures=100 --conf spark.yarn.max.executor.failures=100
- * --executor-memory 20g --conf spark.yarn.executor.memoryOverhead=10000 --class org.ngseq.metagenomics.Assemble
- * metagenomics-0.9-jar-with-dependencies.jar -in ${OUTPUT_PATH}/${PROJECT_NAME}_groupped -out
- * ${OUTPUT_PATH}/${PROJECT_NAME}_assembled -localdir ${LOCAL_TEMP_PATH} -merge -t ${ASSEMBLER_THREADS}
- * <p>
- * <p>
- */
+/**Usage
+ spark-submit --master local[${NUM_EXECUTORS}] --executor-memory 20g --class org.ngseq.metagenomics.Assemble metagenomics-0.9-jar-with-dependencies.jar -in ${OUTPUT_PATH}/${PROJECT_NAME}_groupped -out ${OUTPUT_PATH}/${PROJECT_NAME}_assembled -localdir ${LOCAL_TEMP_PATH} -merge -t ${ASSEMBLER_THREADS}
+
+ spark-submit --master yarn --deploy-mode ${DEPLOY_MODE} --conf spark.dynamicAllocation.enabled=true --conf spark.dynamicAllocation.cachedExecutorIdleTimeout=100 --conf spark.shuffle.service.enabled=true --conf spark.scheduler.mode=${SCHEDULER_MODE} --conf spark.task.maxFailures=100 --conf spark.yarn.max.executor.failures=100 --executor-memory 20g --conf spark.yarn.executor.memoryOverhead=10000  --class org.ngseq.metagenomics.Assemble metagenomics-0.9-jar-with-dependencies.jar -in ${OUTPUT_PATH}/${PROJECT_NAME}_groupped -out ${OUTPUT_PATH}/${PROJECT_NAME}_assembled -localdir ${LOCAL_TEMP_PATH} -merge -t ${ASSEMBLER_THREADS}
+
+ **/
+
+
 public class Assemble {
-
-  private static final Logger logger = Logger.getLogger(Assemble.class.getName());
 
   public static void main(String[] args) throws IOException {
     SparkConf conf = new SparkConf().setAppName("Assemble");
@@ -48,10 +38,10 @@ public class Assemble {
 
     Options options = new Options();
 
-    Option splitOpt = new Option("in", true, "");
-    Option cOpt = new Option("t", true, "Threads");
-    Option kOpt = new Option("m", true, "fraction of memory to be used per process");
-    Option ouOpt = new Option("out", true, "");
+    Option splitOpt = new Option( "in", true, "" );
+    Option cOpt = new Option( "t", true, "Threads" );
+    Option kOpt = new Option( "m", true, "fraction of memory to be used per process" );
+    Option ouOpt = new Option( "out", true, "" );
 
     options.addOption(new Option( "localdir", true, "Absolute path to local temp dir ( YARN must have write permissions if YARN used)"));
     options.addOption(new Option( "merge", "Merge output"));
@@ -65,113 +55,85 @@ public class Assemble {
     options.addOption( ouOpt );
 
     HelpFormatter formatter = new HelpFormatter();
-    formatter.printHelp("spark-submit <spark specific args>", options, true);
+    formatter.printHelp( "spark-submit <spark specific args>", options, true );
 
     CommandLineParser parser = new BasicParser();
     CommandLine cmd = null;
     try {
-      cmd = parser.parse(options, args);
-    } catch (ParseException exp) {
-      System.err.println("Parsing failed.  Reason: " + exp.getMessage());
+      cmd = parser.parse( options, args );
+    }
+    catch( ParseException exp ) {
+      System.err.println( "Parsing failed.  Reason: " + exp.getMessage() );
       System.exit(1);
     }
-    String inputPath = (cmd.hasOption("in") == true) ? cmd.getOptionValue("in") : null;
-    String outDir = (cmd.hasOption("out") == true) ? cmd.getOptionValue("out") : null;
+    String inputPath = (cmd.hasOption("in")==true)? cmd.getOptionValue("in"):null;
+    String outDir = (cmd.hasOption("out")==true)? cmd.getOptionValue("out"):null;
     String localdir = cmd.getOptionValue("localdir");
     boolean subdirs = cmd.hasOption("subdirs");
     boolean debug = cmd.hasOption("debug");
-    String readstype = (cmd.hasOption("single") == true) ? "-r" : "--12";
-    String bin = (cmd.hasOption("bin") == true) ? cmd.getOptionValue("bin") : "megahit";
+    String readstype = (cmd.hasOption("single")==true)? "-r":"--12";
+    String bin = (cmd.hasOption("bin")==true)? cmd.getOptionValue("bin"):"megahit";
 
-    int t = (cmd.hasOption("t") == true) ? Integer.valueOf(cmd.getOptionValue("t")) : 1;
-    double m = (cmd.hasOption("m") == true) ? Double.valueOf(cmd.getOptionValue("m")) : 0.9;
+    int t = (cmd.hasOption("t")==true)? Integer.valueOf(cmd.getOptionValue("t")):1;
+    double m = (cmd.hasOption("m")==true)? Double.valueOf(cmd.getOptionValue("m")):0.9;
     boolean mergeout = cmd.hasOption("merge");
 
     FileSystem fs = FileSystem.get(new Configuration());
-    if (!fs.isDirectory(new Path(outDir))) {
-	//if (!fs.isDirectory(new Path(outDir),new FsPermission(FsAction.ALL,FsAction.ALL,FsAction.ALL))) {
-      fs.mkdirs(new Path(outDir));
-    }
+    fs.mkdirs(fs,new Path(outDir),new FsPermission(FsAction.ALL,FsAction.READ_EXECUTE,FsAction.NONE));
 
     ArrayList<String> splitFileList = new ArrayList<>();
-    if (subdirs) {
+    if(subdirs){
       FileStatus[] dirs = fs.listStatus(new Path(inputPath));
-      for (FileStatus dir : dirs) {
+      for (FileStatus dir : dirs){
         FileStatus[] st = fs.listStatus(dir.getPath());
-        for (int i = 0; i < st.length; i++) {
+        for (int i=0;i<st.length;i++){
           String fn = st[i].getPath().getName().toString();
-          if (!fn.equalsIgnoreCase("_SUCCESS")) {
+          if(!fn.equalsIgnoreCase("_SUCCESS")){
             splitFileList.add(st[i].getPath().toUri().getRawPath().toString());
             System.out.println(st[i].getPath().toUri().getRawPath().toString());
           }
         }
       }
-    } else {
+    }else{
       FileStatus[] st = fs.listStatus(new Path(inputPath));
-      for (int i = 0; i < st.length; i++) {
+      for (int i=0;i<st.length;i++){
         String fn = st[i].getPath().getName().toString();
-        if (!fn.equalsIgnoreCase("_SUCCESS")) {
+        if(!fn.equalsIgnoreCase("_SUCCESS"))
           splitFileList.add(st[i].getPath().toUri().getRawPath().toString());
-        }
       }
     }
 
     JavaRDD<String> splitFilesRDD = sc.parallelize(splitFileList, splitFileList.size());
     Broadcast<String> bs = sc.broadcast(fs.getUri().toString());
     JavaRDD<String> outRDD = splitFilesRDD.mapPartitions(f -> {
-
       String path = f.next();
       System.out.println(path);
       String fname;
-      if (path.lastIndexOf(".") < path.lastIndexOf("/")) {
-        fname = path.substring(path.lastIndexOf("/") + 1);
-      } else {
-        fname = path.substring(path.lastIndexOf("/") + 1, path.lastIndexOf("."));
-      }
+      if(path.lastIndexOf(".")<path.lastIndexOf("/"))
+        fname = path.substring(path.lastIndexOf("/")+1);
+      else fname = path.substring(path.lastIndexOf("/")+1, path.lastIndexOf("."));
 
-      
       String tempName = String.valueOf((new Date()).getTime());
-
-      Path srcInHdfs = new Path(path);
-      Path destInTmp = new Path("file://" + localdir + "/" + tempName + fname);
-      FileSystem myFs = FileSystem.get(new Configuration());
-      myFs.copyToLocalFile(false, srcInHdfs, destInTmp);
-      myFs.close();
-
-//      JavaRDD<String> hdfsFile = sc.textFile(path);
-//      hdfsFile.saveAsTextFile(localdir + "/" + tempName + fname);
 
       DFSClient client = new DFSClient(URI.create(bs.getValue()), new Configuration());
       DFSInputStream hdfsstream = client.open(path);
 
-      //      String ass_cmd = "hdfs dfs -text " + path + " | megahit -t" + t + " -m" + m + " --12 /dev/stdin -o "+localdir+"/"+tempName;
-      String ass_cmd = "cat " + localdir + "/" + tempName + fname + " | megahit -t" + t + " -m" + m
-          + " --12 /dev/stdin -o " + localdir + "/" + tempName;
-      //      String ass_cmd = bin+" -t" + t + " -m" + m + " "+readstype+" /dev/stdin -o "+localdir+"/"+tempName; //YARN must have write permission to localdir
+      String ass_cmd = bin+" -t" + t + " -m" + m + " "+readstype+" /dev/stdin -o "+localdir+"/"+tempName; //YARN must have write permission to localdir
       System.out.println(ass_cmd);
 
       ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", ass_cmd);
       Process process = pb.start();
 
-      BufferedReader hdfsinput = new BufferedReader(new InputStreamReader(myFs.open(srcInHdfs)));
+      BufferedReader hdfsinput = new BufferedReader(new InputStreamReader(hdfsstream));
       BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
       String line;
       while ((line = hdfsinput.readLine()) != null) {
-        try {
-          writer.write(line);
-          writer.newLine();
-        } catch (IOException e) {
-          logger.log(Level.SEVERE, "Cant copy from hdfs stream to local stream: {0}", e.getMessage());
-        }
+        writer.write(line);
+        writer.newLine();
       }
       writer.close();
 
       ArrayList<String> out = new ArrayList<String>();
-      BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
-      String il;
-      while ((il = in.readLine()) != null) {
-        il.length();
-      }
 
       BufferedReader err = new BufferedReader(new InputStreamReader(process.getErrorStream()));
       String e;
@@ -179,36 +141,20 @@ public class Assemble {
         System.out.println(e);
         out.add(e);
       }
-      process.waitFor();
 
-//      Path destInHdfs = new Path(outDir + "/" + fname);
-//      Path srcInTmp = new Path("file://" + localdir + "/" + tempName);
-      // CopyFromLocalFsToHDFS - > deleteFromLocalFs=true, overwrite=true
+      String copy_cmd = System.getenv("HADOOP_HOME")+"/bin/hdfs dfs -put "+localdir+"/"+tempName+" "+outDir+"/megahit_"+fname; //YARN should have write permissions to /tmp in HDFS
+      ProcessBuilder pb2 = new ProcessBuilder("/bin/sh", "-c", copy_cmd);
+      Process process2 = pb2.start();
 
-//      JavaRDD<String> localOutFile = sc.textFile(srcInTmp.toUri().toURL().toString());
+      BufferedReader err2 = new BufferedReader(new InputStreamReader(process2.getErrorStream()));
+      String e2;
+      while ((e2 = err2.readLine()) != null) {
+        System.out.println(e2);
+        out.add(e2);
+      }
+      process2.waitFor();
 
-      //      String copy_cmd = System.getenv("HADOOP_HOME")+"/bin/hdfs dfs -put "+localdir+"/"+tempName+" "+outDir+"/megahit_"+fname; //YARN should have write permissions to /tmp in HDFS
-      //	ProcessBuilder pb2 = new ProcessBuilder("/bin/sh", "-c", copy_cmd);
-      //      Process process2 = pb2.start();
-
-
-//      JavaRDD<String> localOutFile = sc.textFile("file://" + localdir + "/" + tempName);
-//      localOutFile.saveAsTextFile(outDir + "/" + fname);
-
-//      myFs.copyFromLocalFile(true, true, srcInTmp, destInHdfs);
-
-      //TODO:Pipe commands to copy from loca to HDFS and remove local temp
-      // String copy_cmd = "hdfs dfs -put "+localdir+"/"+tempName+" "+ outDir+"/"+fname;
-      // ProcessBuilder pb2 = new ProcessBuilder("/bin/sh", "-c", copy_cmd, "chmod -R 777 "+ outDir);
-      // Process process2 = pb2.start();
-      // BufferedReader err2 = new BufferedReader(new InputStreamReader(process2.getErrorStream()));
-      // String e2;
-      // while ((e2 = err2.readLine()) != null) {
-      //   System.out.println(e2);
-      //   out.add(e2);
-      // }
-      // process2.waitFor();
-      String delete_cmd = "rm -rf " + localdir + "/" + tempName + "*";
+      String delete_cmd = "rm -rf "+localdir+"/"+tempName;
 
       ProcessBuilder pb3 = new ProcessBuilder("/bin/sh", "-c", delete_cmd);
       Process process3 = pb3.start();
@@ -221,32 +167,30 @@ public class Assemble {
       process3.waitFor();
 
       out.add(ass_cmd);
-      //      out.add(copy_cmd);
+      out.add(copy_cmd);
       out.add(delete_cmd);
 
       return out.iterator();
     });
-    if (debug) {
-      outRDD.saveAsTextFile("pipe_errorlog/" + String.valueOf(new Date().getTime()));
-    } else {
-      outRDD.foreach(err -> System.out.println(err));
-    }
+    if(debug) outRDD.saveAsTextFile("pipe_errorlog/"+String.valueOf(new Date().getTime()));
+    else outRDD.foreach(err -> System.out.println(err));
 
-    if (mergeout) {
+
+    if(mergeout){
 
       FileStatus[] dirs = fs.listStatus(new Path(outDir));
-      for (FileStatus dir : dirs) {
-	  if(dir.getPath().getName().toString().startsWith("megahit")){	  
-	      FileStatus[] st = fs.listStatus(dir.getPath());
-	      for (int i = 0; i < st.length; i++) {
-		  String fn = st[i].getPath().getName().toString();
-		  if (fn.endsWith(".fasta") || fn.endsWith(".fa")) {
-		      String dst = outDir + "/" + dir.getPath().getName() + "_" + st[i].getPath().getName();
-		      FileUtil.copy(fs, st[i].getPath(), fs, new Path(dst), false, new Configuration());
-		  }
-	      }
-	      fs.delete(dir.getPath(), true);	
-	  }
+      for (FileStatus dir : dirs){
+        if(dir.getPath().getName().toString().startsWith("megahit")){
+          FileStatus[] st = fs.listStatus(dir.getPath());
+          for (int i=0;i<st.length;i++){
+            String fn = st[i].getPath().getName().toString();
+            if(fn.endsWith(".fasta") || fn.endsWith(".fa")){
+              String dst = outDir+"/"+dir.getPath().getName()+"_"+st[i].getPath().getName();
+              FileUtil.copy(fs, st[i].getPath(), fs, new Path(dst),true, new Configuration());
+            }
+          }
+          fs.delete(dir.getPath(), true);
+        }
       }
     }
 
