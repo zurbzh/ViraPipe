@@ -87,7 +87,6 @@ public class BlastNFilter {
         sc.hadoopConfiguration().set("textinputformat.record.delimiter", ">");
 
         FileSystem fs = FileSystem.get(new Configuration());
-
         FileStatus[] st = fs.listStatus(new Path(input));
         ArrayList<String> splitFileList = new ArrayList<>();
         for (int i=0;i<st.length;i++){
@@ -117,11 +116,11 @@ public class BlastNFilter {
 //	    Path srcInHdfs = new Path(fname);
 //	    Path destInTmp = new Path("file:///tmp/" + srcInHdfs.getName());
 //	    fs.copyToLocalFile(false, srcInHdfs, destInTmp);
-            
+
 //                blastn_cmd = "cat /tmp/" + srcInHdfs.getName() + " | blastn -db " + db + " -num_threads "+num_threads+" -task megablast -word_size " + word_size + " -max_target_seqs " + max_target_seqs + " -evalue " + evalue + " " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt " + outfmt;
 //            else
 //                blastn_cmd = "cat /tmp/" + srcInHdfs.getName() + " | blastn -db " + db + " -num_threads "+num_threads+" -word_size " + word_size + " -gapopen " + gapopen + " -gapextend " + gapextend + " -penalty " + penalty + " -reward " + reward + " -max_target_seqs " + max_target_seqs + " -evalue " + evalue + " " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt " + outfmt;
-	    
+
             if (task.equalsIgnoreCase("megablast"))
                 blastn_cmd = bin+" -db " + db + " -num_threads "+num_threads+" -task megablast -word_size " + word_size + " -max_target_seqs " + max_target_seqs + " -evalue " + evalue + " " + ((show_gis == true) ? "-show_gis " : "") + " -outfmt " + outfmt;
             else
