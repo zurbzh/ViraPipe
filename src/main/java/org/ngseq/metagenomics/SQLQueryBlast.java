@@ -7,8 +7,10 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.functions.*;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * Usage
@@ -19,7 +21,8 @@ import java.io.IOException;
 
 public class SQLQueryBlast {
 
-  private static String tablename = "records";
+  private static String blasttable = "records";
+  private static String taxatable = "taxa";
 
   public static void main(String[] args) throws IOException {
     SparkConf conf = new SparkConf().setAppName("SQLQueryBlast");
@@ -46,10 +49,8 @@ public class SQLQueryBlast {
     options.addOption(new Option( "show_gis", "" ));
     options.addOption(new Option( "outfmt", true, "" ));
     options.addOption(new Option( "db", true, "" ));
-    options.addOption(new Option( "query", true, "SQL query string." ));
     options.addOption(new Option( "format", true, "parquet or fastq" ));
     options.addOption(new Option( "lines", true, "" ));
-    options.addOption( new Option( "tablename", true, "Default sql table name is 'records'"));
 
     HelpFormatter formatter = new HelpFormatter();
     formatter.printHelp( "spark-submit <spark specific args>", options, true );
@@ -66,20 +67,22 @@ public class SQLQueryBlast {
 
     String input = (cmd.hasOption("in")==true)? cmd.getOptionValue("in"):null;
     String outDir = (cmd.hasOption("out")==true)? cmd.getOptionValue("out"):null;
-    String query = (cmd.hasOption("query")==true)? cmd.getOptionValue("query"):null;
     String format = (cmd.hasOption("format")==true)? cmd.getOptionValue("format"):"fastq";
     int lines = (cmd.hasOption("lines")==true)? Integer.valueOf(cmd.getOptionValue("lines")):100;
-    tablename = (cmd.hasOption("tablename")==true)? cmd.getOptionValue("tablename"):"records";
 
-    JavaRDD<String> rdd = sc.textFile(input);
+    JavaRDD<String> blastrdd = sc.textFile(input);
+    JavaRDD<String> taxardd = sc.textFile("hdfs:///Projects/indexes/Resources/taxonomy/acc_taxid_gi_species.txt");
 
-    JavaRDD<BlastRecord> blastRDD = rdd.map(f -> {
+    JavaRDD<BlastRecord> blastRDD = blastrdd.map(f -> {
 
         //qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore
         String[] fields = f.split("\\t");
+
         BlastRecord record = new BlastRecord();
         record.setQseqid(fields[0]!=null?fields[0]:null);
-        record.setSseqid(fields[1]!=null?fields[1]:null);
+        String[] gifields = fields[1].split("\\|");
+        System.out.println(Arrays.toString(gifields));
+        record.setGi(gifields[1]!=null?gifields[1]:null);
         record.setPident(fields[2]!=null?Double.valueOf(fields[2]):null);
         record.setLength(fields[3]!=null?Integer.valueOf(fields[3]):null);
         record.setMismatch(fields[4]!=null?Integer.valueOf(fields[4]):null);
@@ -90,38 +93,52 @@ public class SQLQueryBlast {
         record.setSend(fields[9]!=null?Long.valueOf(fields[9]):null);
         record.setEvalue(fields[10]!=null?Double.valueOf(fields[10]):null);
         record.setBitscore(fields[11]!=null?Double.valueOf(fields[11]):null);
+        record.setQlen(fields[12]!=null?Long.valueOf(fields[12]):null);
+        record.setSlen(fields[13]!=null?Long.valueOf(fields[13]):null);
 
         System.out.println(f);
 
       return record;
     });
 
-    Dataset df = sqlContext.createDataFrame(blastRDD, BlastRecord.class);
-    df.registerTempTable(tablename);
+      JavaRDD<TaxonomyRecord> taxaRDD = taxardd.map(f -> {
+
+          //qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore
+          String[] fields = f.split("\\t");
+          TaxonomyRecord record = new TaxonomyRecord();
+          record.setAcc(fields[0]!=null?fields[0]:null);
+          record.setAcc1(fields[1]!=null?fields[1]:null);
+          record.setTaxid(fields[2]!=null?fields[2]:null);
+          record.setGi(fields[3]!=null?fields[3]:null);
+          record.setSpecies(fields[4]!=null?fields[4]:null);
+
+          System.out.println(f);
+
+          return record;
+      });
+
+
+
+    Dataset blastDF = sqlContext.createDataFrame(blastRDD, BlastRecord.class);
+    blastDF.registerTempTable(blasttable);
+
+    Dataset taxaDF = sqlContext.createDataFrame(taxaRDD, TaxonomyRecord.class);
+      taxaDF.registerTempTable(taxatable);
     //eq. count duplicates "SELECT count(DISTINCT(sequence)) FROM reads"
     //"SELECT key,LEN(sequence) as l FROM reads where l<100;"
 
-    if(query!=null) {
 
-      Dataset<Row> resultDF = sqlContext.sql(query);
-      resultDF.show(lines, false);
+      String coverage = "SELECT *, Round((((qend - qstart)+1)/qlen)*100, 2) as coverage from records where Round((((qend - qstart)+1)/qlen)*100, 2) > 70 AND pident > 90 ORDER BY qseqid, Round((((qend - qstart)+1)/qlen)*100, 2), pident ";
+      Dataset<Row> parsedDF = sqlContext.sql(coverage);
+      parsedDF.dropDuplicates("gi").show(lines, false);
+
+      Dataset<Row> resultDF = parsedDF.join(taxaDF, parsedDF.col("gi").equalTo(taxaDF.col("gi")));
+
 
       if(outDir!=null){
-        if(format.equals("parquet")){
-          resultDF.write().parquet(outDir);
-        }
-        else if(format.equals("csv")){
-          JavaRDD<String> resultRDD = dfToCSV(resultDF);
-          //resultDF.write().csv(outDir); //prints columns in wrong order
+          JavaRDD<String> resultRDD = dfToTabDelimited(resultDF).coalesce(1);
           resultRDD.saveAsTextFile(outDir);
-        }
-        else{
-          JavaRDD<String> resultRDD = dfToTabDelimited(resultDF);
-          resultRDD.saveAsTextFile(outDir);
-        }
-
       }
-    }
     sc.stop();
 
   }
@@ -130,26 +147,15 @@ public class SQLQueryBlast {
     return df.toJavaRDD().map(row ->  {
       //qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore
 
-      String output = row.getAs("qseqid")+"\t"+row.getAs("sseqid")+"\t"+row.getAs("pident")+"\t"
-              +row.getAs("length") +"\t"+row.getAs("mismatch")+"\t"+row.getAs("gapopen")
-              +"\t"+row.getAs("qstart")+"\t"+row.getAs("qend")+"\t"+row.getAs("sstart")
-              +"\t"+row.getAs("send")+"\t"+row.getAs("evalue")+"\t"+row.getAs("bitscore");
+      String output = row.getAs("qseqid")+"\t"+row.getAs("gi")+"\t"+row.getAs("pident")+"\t"
+              +row.getAs("length")+"\t"+row.getAs("coverage")+"\t"
+              +"\t"+row.getAs("evalue")+"\t"
+              +row.getAs("bitscore")+"\t"+row.getAs("species");
 
       return output;
     });
   }
 
-  private static JavaRDD<String> dfToCSV(Dataset<Row> df) {
-    return df.toJavaRDD().map(row ->  {
-      //qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore
 
-      String output = row.getAs("qseqid")+","+row.getAs("sseqid")+","+row.getAs("pident")+","
-              +row.getAs("length") +","+row.getAs("mismatch")+","+row.getAs("gapopen")
-              +","+row.getAs("qstart")+","+row.getAs("qend")+","+row.getAs("sstart")
-              +","+row.getAs("send")+","+row.getAs("evalue")+","+row.getAs("bitscore");
-
-      return output;
-    });
-  }
 
 }

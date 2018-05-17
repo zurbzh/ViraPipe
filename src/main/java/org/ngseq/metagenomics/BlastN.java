@@ -19,6 +19,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import org.apache.spark.broadcast.Broadcast;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 import scala.Tuple2;
 
 import java.io.*;
@@ -78,7 +81,7 @@ public class BlastN {
         int max_target_seqs = (cmd.hasOption("max_target_seqs")==true)? Integer.valueOf(cmd.getOptionValue("max_target_seqs")):10;
         double evalue = (cmd.hasOption("evalue")==true)? Double.valueOf(cmd.getOptionValue("evalue")):0.001;
         boolean show_gis = cmd.hasOption("show_gis");
-        String outfmt = (cmd.hasOption("outfmt")==true)? cmd.getOptionValue("outfmt"): "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sscinames sskingdoms";
+        String outfmt = (cmd.hasOption("outfmt")==true)? cmd.getOptionValue("outfmt"):"\"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen\"";
         String db = cmd.getOptionValue("db");
         String task = (cmd.hasOption("task")==true)? cmd.getOptionValue("task"):"blastn";
         int num_threads = (cmd.hasOption("num_threads")==true)? Integer.valueOf(cmd.getOptionValue("num_threads")):1;
@@ -89,6 +92,8 @@ public class BlastN {
         SparkConf conf = new SparkConf().setAppName("BlastN");
         JavaSparkContext sc = new JavaSparkContext(conf);
         sc.hadoopConfiguration().set("textinputformat.record.delimiter", ">");
+        SQLContext sqlContext = new SQLContext(sc);
+
 
         FileSystem fs = FileSystem.get(new Configuration());
 
@@ -105,9 +110,11 @@ public class BlastN {
 
         JavaRDD<String> fastaFilesRDD = sc.parallelize(splitFileList, splitFileList.size());
         Broadcast<String> bs = sc.broadcast(fs.getUri().toString());
+        System.out.println(" varibale - broadcast bs: " + fs.getUri().toString());
         JavaRDD<String> outRDD = fastaFilesRDD.mapPartitions(f -> {
             Process process;
             String fname = f.next();
+            System.out.println(" varibale - fname: " + fname);
 
 //	    Path srcInHdfs = new Path(fname);
 //	    Path destInTmp = new Path("file:///tmp/" + srcInHdfs.getName());
@@ -119,6 +126,7 @@ public class BlastN {
 
 
             DFSClient client = new DFSClient(URI.create(bs.getValue()), new Configuration());
+
             DFSInputStream hdfsstream = client.open(fname);
             String blastn_cmd;
 
@@ -170,6 +178,9 @@ public class BlastN {
 
             return out.iterator();
         });
+
+
+
 
         if(taxname!="")
             outRDD.filter(res ->{

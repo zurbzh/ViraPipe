@@ -135,6 +135,7 @@ public class BlastNFilter {
             BufferedWriter blastinputwriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
             String l;
             while ((l = hdfsinput.readLine()) != null) {
+                System.out.println(l);
                 blastinputwriter.write(l);
                 blastinputwriter.newLine();
             }

@@ -12,7 +12,7 @@ import java.io.Serializable;
     //qseqid    sseqid     pident length mismatch gapopen qstart    qend sstart     send        evalue bitscore
     //k141_53	CM000261.1	91.429	35	    1	    1	    238	    270	21459480	21459446	0.001	47.3
     private String qseqid;
-    private String sseqid;
+    private String gi;
     private Double pident;
     private Integer length;
     private Integer mismatch;
@@ -23,6 +23,8 @@ import java.io.Serializable;
     private Long send;
     private Double evalue;
     private Double bitscore;
+    private Long qlen;
+    private Long slen;
 
     public String getQseqid() {
         return qseqid;
@@ -32,12 +34,12 @@ import java.io.Serializable;
         this.qseqid = qseqid;
     }
 
-    public String getSseqid() {
-        return sseqid;
+    public String getGi() {
+        return gi;
     }
 
-    public void setSseqid(String sseqid) {
-        this.sseqid = sseqid;
+    public void setGi(String gi) {
+        this.gi = gi;
     }
 
     public Double getPident() {
@@ -119,5 +121,22 @@ import java.io.Serializable;
     public void setBitscore(Double bitscore) {
         this.bitscore = bitscore;
     }
+
+    public Long getQlen() {
+        return qlen;
+    }
+
+    public void setQlen(Long qlen) {
+        this.qlen = qlen;
+    }
+
+    public Long getSlen() {
+        return slen;
+    }
+
+    public void setSlen(Long slen) {
+        this.slen = slen;
+    }
+
 }
 
