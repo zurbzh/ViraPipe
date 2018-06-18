@@ -7,12 +7,12 @@ import java.io.Serializable;
  */
 
 
-    public class BlastRecord implements Serializable {
+public class BlastRecord implements Serializable {
 
     //qseqid    sseqid     pident length mismatch gapopen qstart    qend sstart     send        evalue bitscore
     //k141_53	CM000261.1	91.429	35	    1	    1	    238	    270	21459480	21459446	0.001	47.3
     private String qseqid;
-    private String gi;
+    private String acc;
     private Double pident;
     private Integer length;
     private Integer mismatch;
@@ -34,12 +34,12 @@ import java.io.Serializable;
         this.qseqid = qseqid;
     }
 
-    public String getGi() {
-        return gi;
+    public String getAcc() {
+        return acc;
     }
 
-    public void setGi(String gi) {
-        this.gi = gi;
+    public void setAcc(String acc) {
+        this.acc = acc;
     }
 
     public Double getPident() {
