@@ -17,7 +17,10 @@ import java.io.Serializable;
         private String bases;
         private String cigar;
         private boolean readUnmapped;
-
+        private String qualityBase;
+        private boolean readPairedFlag;
+        private boolean firstOfPairFlag;
+        private boolean secondOfPairFlag;
     public MyAlignment(){
         
     }
@@ -43,10 +46,28 @@ import java.io.Serializable;
         this.duplicateRead = duplicateRead;
     }
 
+    public MyAlignment(String readName, Integer start, String referenceName, Integer length, String bases, String cigar, boolean readUnmapped, boolean duplicateRead, String qualityBase, boolean readPairedFlag, boolean firstOfPairFlag, boolean secondOfPairFlag) {
+        this.readName = readName;
+        this.start = start;
+        this.referenceName = referenceName;
+        this.length = length;
+        this.bases = bases;
+        this.cigar = cigar;
+        this.readUnmapped = readUnmapped;
+        this.duplicateRead = duplicateRead;
+        this.qualityBase = qualityBase;
+        this.readPairedFlag = readPairedFlag;
+        this.firstOfPairFlag = firstOfPairFlag;
+        this.secondOfPairFlag = secondOfPairFlag;
+    }
+
     public boolean isReadUnmapped() {
         return readUnmapped;
     }
 
+    public boolean isReadPairedFlag() {return readPairedFlag;}
+    public boolean isFirstOfPairFlag() {return firstOfPairFlag;}
+    public boolean isSecondOfPairFlag() {return secondOfPairFlag;}
     public String getReadName() {
         return readName;
     }
@@ -56,35 +77,35 @@ import java.io.Serializable;
     }
 
 
-        public Integer getStart() {
+    public Integer getStart() {
             return start;
         }
 
-        public void setStart(Integer start) {
+    public void setStart(Integer start) {
             this.start = start;
         }
 
-        public Integer getLength() {
+    public Integer getLength() {
             return length;
         }
 
-        public void setLength(Integer length) {
+    public void setLength(Integer length) {
             this.length = length;
         }
 
-        public String getBases() {
+    public String getBases() {
             return bases;
         }
 
-        public void setBases(String bases) {
+    public void setBases(String bases) {
             this.bases = bases;
         }
 
-        public String getCigar() {
+    public String getCigar() {
             return cigar;
         }
 
-        public void setCigar(String cigar) {
+    public void setCigar(String cigar) {
             this.cigar = cigar;
         }
 
@@ -107,5 +128,8 @@ import java.io.Serializable;
     public void setReadUnmapped(boolean readUnmapped) {
         this.readUnmapped = readUnmapped;
     }
+
+    public String getQualityBase() {return qualityBase;}
+    public void setQualityBase (String qualityBase) {this.qualityBase = qualityBase;}
 }
 

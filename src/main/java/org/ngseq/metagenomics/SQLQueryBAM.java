@@ -33,7 +33,7 @@ public class SQLQueryBAM {
     SparkConf conf = new SparkConf().setAppName("SQLQueryBAM");
 
     JavaSparkContext sc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new HiveContext(sc.sc());
+    SQLContext sqlContext = new SQLContext(sc);
 
     Options options = new Options();
     Option opOpt = new Option( "out", true, "HDFS path for output files. If not present, the output files are not moved to HDFS." );
@@ -56,6 +56,7 @@ public class SQLQueryBAM {
     String bwaOutDir = (cmd.hasOption("out")==true)? cmd.getOptionValue("out"):null;
     String query = (cmd.hasOption("query")==true)? cmd.getOptionValue("query"):null;
     String bamin = (cmd.hasOption("in")==true)? cmd.getOptionValue("in"):null;
+    System.out.print("input file " + bamin);
 
     sc.hadoopConfiguration().setBoolean(BAMInputFormat.KEEP_PAIRED_READS_TOGETHER_PROPERTY, true);
 
@@ -72,6 +73,10 @@ public class SQLQueryBAM {
       //Save as parquet file
       Dataset df2 = sqlContext.sql(query);
       df2.show(100,false);
+      df2.groupBy("referenceName").count().show(10000,false);
+      df2.count();
+
+      df2.groupBy("length").count().show(10000,false);
 
       if(bwaOutDir!=null)
         df2.write().parquet(bwaOutDir);

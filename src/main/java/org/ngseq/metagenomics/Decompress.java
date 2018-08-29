@@ -76,34 +76,34 @@ public class Decompress {
 
     FileSystem fs = FileSystem.get(new Configuration());
 
-          FileStatus[] st = fs.listStatus(new Path(input));
+    FileStatus[] st = fs.listStatus(new Path(input));
 
-          ArrayList<Tuple3<String, String, Integer>> splitFileList = new ArrayList<>();
+    ArrayList<Tuple3<String, String, Integer>> splitFileList = new ArrayList<>();
 
-          ArrayList<FileStatus> compressedfiles = new ArrayList<>();
-          for (FileStatus f : Arrays.asList(st)) {
-            if (f.getPath().getName().endsWith(".gz") || f.getPath().getName().endsWith(".zip") || f.getPath().getName().endsWith(".tar") || f.getPath().getName().endsWith(".bz"))
-              compressedfiles.add(f);
-          }
+    ArrayList<FileStatus> compressedfiles = new ArrayList<>();
+    for (FileStatus f : Arrays.asList(st)) {
+      if (f.getPath().getName().endsWith(".gz") || f.getPath().getName().endsWith(".zip") || f.getPath().getName().endsWith(".tar") || f.getPath().getName().endsWith(".bz"))
+        compressedfiles.add(f);
+    }
 
-          Iterator<FileStatus> it = compressedfiles.iterator();
-          int count = 1;
-          while (it.hasNext()) {
-            String fn1 = it.next().getPath().getName();
-            if (it.hasNext()) {
-              String fn2 = it.next().getPath().getName();
-              splitFileList.add(new Tuple3<>(fn1, fn2, count));
-              count++;
-            }
-          }
+    Iterator<FileStatus> it = compressedfiles.iterator();
+    int count = 1;
+    while (it.hasNext()) {
+      String fn1 = it.next().getPath().getName();
+      if (it.hasNext()) {
+        String fn2 = it.next().getPath().getName();
+        splitFileList.add(new Tuple3<>(fn1, fn2, count));
+        count++;
+      }
+    }
 
-          JavaRDD<Tuple3<String, String, Integer>> filesRDD = sc.parallelize(splitFileList, splitFileList.size());
-          filesRDD.foreachPartition(files -> {
-            Tuple3<String, String, Integer> f = files.next();
-            decompress(FileSystem.get(new Configuration()), input + "/" + f._1(), outpath + "/" + f._3() + "/1.fq");
-            decompress(FileSystem.get(new Configuration()), input + "/" + f._2(), outpath + "/" + f._3() + "/2.fq");
+    JavaRDD<Tuple3<String, String, Integer>> filesRDD = sc.parallelize(splitFileList, splitFileList.size());
+    filesRDD.foreachPartition(files -> {
+      Tuple3<String, String, Integer> f = files.next();
+      decompress(FileSystem.get(new Configuration()), input + "/" + f._1(), outpath + "/" + f._3() + "/1.fq");
+      decompress(FileSystem.get(new Configuration()), input + "/" + f._2(), outpath + "/" + f._3() + "/2.fq");
 
-          });
+    });
 
 
     sc.stop();

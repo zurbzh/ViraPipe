@@ -4,6 +4,7 @@ package org.ngseq.metagenomics;
 import com.github.lindenb.jbwa.jni.BwaIndex;
 import com.github.lindenb.jbwa.jni.BwaMem;
 import com.github.lindenb.jbwa.jni.ShortRead;
+import io.hops.VirapipeHopsPipeline;
 import org.apache.commons.cli.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -23,6 +24,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**Usage:
  //ON SINGLE NODE
@@ -33,6 +36,9 @@ import java.util.List;
 
 
 public class AlignInterleavedMulti {
+
+  private static final Logger LOG = Logger.getLogger(AlignInterleavedMulti.class.getName());
+
 
   public static void main(String[] args) throws IOException {
     SparkConf conf = new SparkConf().setAppName("AlignInterleaved");
@@ -116,8 +122,8 @@ public class AlignInterleavedMulti {
           ArrayList<Tuple2<Text, SequencedFragment>> filtered = new ArrayList<Tuple2<Text, SequencedFragment>>();
           Arrays.asList(aligns).forEach(aln -> {
             String[] fields = aln.split("\\t");
-
             int flag = Integer.parseInt(fields[1]);
+
 
             if (flag == 77) {
               String name = fields[0] + "/1";

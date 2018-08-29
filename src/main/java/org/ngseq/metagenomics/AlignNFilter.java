@@ -72,7 +72,7 @@ public class AlignNFilter {
         catch( ParseException exp ) {
             System.err.println( "Parsing failed.  Reason: " + exp.getMessage() );
         }
-        String fastq = cmd.getOptionValue("fastq");
+        String fastq = cmd.getOptionValue("in");
         String ref = (cmd.hasOption("ref")==true)? cmd.getOptionValue("ref"):null;
         boolean unmapped = cmd.hasOption("unmapped");
         boolean mapped = cmd.hasOption("mapped");
@@ -187,9 +187,7 @@ public class AlignNFilter {
 
         });
 
-        if(format!=null)
-            new HDFSWriter(alignmentRDD, outDir, format, sc);
-        else
+
             alignmentRDD.saveAsTextFile(outDir);
 
         sc.stop();
