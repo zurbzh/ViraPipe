@@ -73,13 +73,15 @@ public class AlignInterleavedMulti {
     FileStatus[] dirs = fs.listStatus(new Path(in));
 
     Arrays.asList(dirs).forEach(dir ->{
+
       String output = dir.getPath().getName();
+
       JavaPairRDD<Text, SequencedFragment> fastqRDD = sc.newAPIHadoopFile(dir.getPath().toString(), FastqInputFormat.class, Text.class, SequencedFragment.class, sc.hadoopConfiguration());
 
       JavaPairRDD<Text, SequencedFragment> alignmentRDD = fastqRDD.mapPartitionsToPair(split -> {
         //THIS MUST BE LOADED HERE FOR YARN
         System.loadLibrary("bwajni");
-        //TODO: Modify JBWA to use SAMRecord class, this woudl radically reduce map operations
+        //TODO: Modify JBWA to use SAMRecord class, this would radically reduce map operations
         BwaIndex index = new BwaIndex(new File(ref));
         BwaMem mem = new BwaMem(index);
 

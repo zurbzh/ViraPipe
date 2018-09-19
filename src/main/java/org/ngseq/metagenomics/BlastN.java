@@ -114,7 +114,7 @@ public class BlastN {
         JavaRDD<String> outRDD = fastaFilesRDD.mapPartitions(f -> {
             Process process;
             String fname = f.next();
-            System.out.println(" varibale - fname: " + fname);
+
 
 //	    Path srcInHdfs = new Path(fname);
 //	    Path destInTmp = new Path("file:///tmp/" + srcInHdfs.getName());

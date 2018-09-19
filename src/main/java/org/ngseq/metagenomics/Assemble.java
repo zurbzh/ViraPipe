@@ -79,7 +79,9 @@ public class Assemble {
     boolean mergeout = cmd.hasOption("merge");
 
     FileSystem fs = FileSystem.get(new Configuration());
-    fs.mkdirs(fs,new Path(outDir),new FsPermission(FsAction.ALL,FsAction.READ_EXECUTE,FsAction.NONE));
+    fs.mkdirs(fs,new Path(outDir),new FsPermission(FsAction.ALL,FsAction.ALL,FsAction.ALL));
+
+
 
     ArrayList<String> splitFileList = new ArrayList<>();
     if(subdirs){
@@ -115,8 +117,23 @@ public class Assemble {
 
       String tempName = String.valueOf((new Date()).getTime());
 
+
+
+
       DFSClient client = new DFSClient(URI.create(bs.getValue()), new Configuration());
       DFSInputStream hdfsstream = client.open(path);
+
+      String premission_cmd = System.getenv("HADOOP_HOME")+"/bin/hdfs dfs -chmod -R 775 " + outDir;
+
+      ProcessBuilder pc = new ProcessBuilder("/bin/sh", "-c", premission_cmd);
+      Process perm_process = pc.start();
+
+      BufferedReader err4 = new BufferedReader(new InputStreamReader(perm_process.getErrorStream()));
+      String e4;
+      while ((e4 = err4.readLine()) != null) {
+        System.out.println(e4);
+      }
+      perm_process.waitFor();
 
       String ass_cmd = bin+" -t" + t + " -m" + m + " "+readstype+" /dev/stdin -o "+localdir+"/"+tempName; //YARN must have write permission to localdir
       System.out.println(ass_cmd);
@@ -189,7 +206,7 @@ public class Assemble {
               FileUtil.copy(fs, st[i].getPath(), fs, new Path(dst),true, new Configuration());
             }
           }
-          fs.delete(dir.getPath(), true);
+          //fs.delete(dir.getPath(), true);
         }
       }
     }
