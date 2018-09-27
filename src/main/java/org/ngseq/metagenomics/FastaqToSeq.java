@@ -40,6 +40,7 @@ import java.util.logging.Logger;
 public class FastaqToSeq {
 
     private static final Logger LOG = Logger.getLogger(FastaqToSeq.class.getName());
+    private static String tablename = "records";
 
 
     public static void main(String[] args) throws IOException {
@@ -77,66 +78,48 @@ public class FastaqToSeq {
         FileStatus[] files = fs.listStatus(new Path(input));
 
         Arrays.asList(files).forEach(file -> {
-            int counter = 1;
-            String output = file.getPath().getName().split("#")[0];
+
+            String output = file.getPath().getName().split("\\.")[0];
             JavaPairRDD<Text, SequencedFragment> fastqRDD = sc.newAPIHadoopFile(file.getPath().toString(), FastqInputFormat.class, Text.class, SequencedFragment.class, sc.hadoopConfiguration());
 
 
-            JavaRDD<String> seqRDD = fastqRDD.mapPartitions(split -> {
-
-                ArrayList<String> interLeaved = new ArrayList<String>();
-
-                while (split.hasNext()) {
-                    Tuple2<Text, SequencedFragment> next = split.next();
-                    String key = next._1.toString();
-                    String[] keysplit = key.split("/");
-                    key = keysplit[0];
-                    String sequence = next._2.getSequence().toString();
-                    if (split.hasNext()) {
-                        Tuple2<Text, SequencedFragment> next2 = split.next();
-                        String key2 = next2._1.toString();
-                        String[] keysplit2 = key2.split("/");
-                        key2 = keysplit2[0];
-                        String sequence2 = next2._2.getSequence().toString();
-
-                        if (key.equalsIgnoreCase(key2)) {
-                            interLeaved.add(key + "," + sequence + sequence2);
-                        } else
-                            split.next();
-
-                    }
-                }
-
-
-                return interLeaved.iterator();
+            JavaRDD<MyRead> rdd = fastqRDD.map(record -> {
+                        MyRead read = new MyRead();
+                        read.setKey(record._1.toString().split("/")[0]);
+                        read.setSequence(record._2.getSequence().toString());
+                        return read;
             });
 
-            JavaRDD<String> indexRDD = seqRDD.zipWithIndex().mapPartitions(line ->{
+            Dataset df = sqlContext.createDataFrame(rdd, MyRead.class);
+            df.registerTempTable(tablename);
+
+
+
+            String query = "SELECT key, concat_ws('',collect_list(sequence)) AS sequence FROM records GROUP BY key";
+            Dataset seq = sqlContext.sql(query);
+            seq.show(100);
+            JavaRDD<String> sortedRDD = dfToRDD(seq);
+
+
+
+
+
+
+            JavaRDD<String> indexRDD = sortedRDD.zipWithIndex().mapPartitions(line ->{
                 ArrayList<String> index = new ArrayList<String>();
                 while (line.hasNext()) {
                     Tuple2<String, Long> record = line.next();
-                    String[] read = record._1.split(",");
+                    String[] read = record._1.split("\t");
                     String readName = read[0];
                     String sequence = read[1];
-                    Long indexNum = record._2;
+                    Long indexNum = record._2 + 1;
 
                     index.add(indexNum.toString() + "\t" + readName + "\t" + sequence);
                 }
                 return index.iterator();
 
             });
-
             indexRDD.coalesce(1).saveAsTextFile(seqOutDir + "/" + output);
-
-
-
-
-
-
-
-
-
-
 
         });
 
@@ -150,14 +133,10 @@ public class FastaqToSeq {
                     String fileName = folder.substring(folder.lastIndexOf("/")+1) + ".seq";
                     String newPath = dir.getPath().getParent().toUri().getRawPath().toString() + "/" + fileName;
 
-                    System.out.println("**newPath" + newPath);
-                    System.out.println("**srcPath" + st[i].getPath().toString());
-
                     Path srcPath = new Path(st[i].getPath().toString());
 
                     FileUtil.copy(fs, srcPath, fs, new Path(newPath),true, new Configuration());
                     fs.delete(new Path(dir.getPath().toUri().getRawPath()));
-                    System.out.println("*" + st[i].getPath().toUri().getRawPath().toString());
                 }
             }
         }

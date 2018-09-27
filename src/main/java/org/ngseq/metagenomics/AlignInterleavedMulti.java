@@ -88,6 +88,7 @@ public class AlignInterleavedMulti {
         List<ShortRead> L1 = new ArrayList<ShortRead>();
         List<ShortRead> L2 = new ArrayList<ShortRead>();
 
+
         while (split.hasNext()) {
           Tuple2<Text, SequencedFragment> next = split.next();
           String key = next._1.toString();

@@ -103,6 +103,8 @@ public class SQLQueryBAMTCGA {
 
       Dataset<Row> samDF = sqlContext.createDataFrame(rdd, MyAlignment.class);
       samDF.registerTempTable("records");
+
+
       if (query1 != null) {
 
         List<String> items = Arrays.asList(s.split("\\s*/\\s*"));
