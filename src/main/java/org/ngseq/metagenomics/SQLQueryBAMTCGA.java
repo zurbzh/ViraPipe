@@ -135,45 +135,15 @@ public class SQLQueryBAMTCGA {
 
         //metadata.coalesce(1).write().csv(bwaOutDir + "/" + name);
         JavaRDD<String> tabDelRDD = dfToRDD(df2);
+
+        JavaPairRDD<Text, SequencedFragment> fastqRDD = dfToFastq(df2);
         //tabDelRDD.saveAsTextFile(bwaOutDir+ "/" + name);
         //fastqRDD.saveAsNewAPIHadoopFile(bwaOutDir+ "/" + name, Text.class, SequencedFragment.class, FastqOutputFormat.class, sc.hadoopConfiguration());
 
-        JavaPairRDD<Text, SequencedFragment> interleavedRDD = tabDelRDD.mapPartitionsToPair(split -> {
-
-          ArrayList<Tuple2<Text, SequencedFragment>> filtered = new ArrayList<Tuple2<Text, SequencedFragment>>();
-
-          while (split.hasNext()) {
-            String[] line = split.next().split("\t");
-            String readName = line[6];
-            SequencedFragment sf = new SequencedFragment();
-            Text t = new Text(readName + "/1");
-            sf.setQuality(new Text(line[5]));
-            sf.setSequence(new Text(line[0]));
 
 
-            if (split.hasNext()) {
-              String[] line2 = split.next().split("\t");
-              String readName2 = line2[6];
-              SequencedFragment sf2 = new SequencedFragment();
-              Text t2 = new Text(readName2 + "/2");
-              sf2.setQuality(new Text(line2[5]));
-              sf2.setSequence(new Text(line2[0]));
 
-              if(readName.equalsIgnoreCase(readName2)){
-                filtered.add(new Tuple2<Text, SequencedFragment>(t, sf));
-                filtered.add(new Tuple2<Text, SequencedFragment>(t2, sf2));
-
-              }else
-                split.next();
-            }
-
-            }
-
-            return filtered.iterator();
-          });
-
-
-        interleavedRDD.saveAsNewAPIHadoopFile(unmappedDir+"/"+name, Text.class, SequencedFragment.class, FastqOutputFormat.class, sc.hadoopConfiguration());
+        fastqRDD.saveAsNewAPIHadoopFile(unmappedDir+"/"+name, Text.class, SequencedFragment.class, FastqOutputFormat.class, sc.hadoopConfiguration());
 
 
       }
@@ -194,6 +164,27 @@ public class SQLQueryBAMTCGA {
 
       return output;
     });
+  }
+
+
+  private static JavaPairRDD<Text, SequencedFragment> dfToFastq(Dataset<Row> df) {
+
+    return df.toJavaRDD().mapToPair(row -> {
+
+
+
+      String name = row.getAs("readName");
+
+
+      //TODO: check values
+      Text t = new Text(name);
+      SequencedFragment sf = new SequencedFragment();
+      sf.setSequence(new Text(row.getAs("bases").toString()));
+      sf.setQuality(new Text(row.getAs("qualityBase").toString()));
+
+      return new Tuple2<Text, SequencedFragment>(t, sf);
+    });
+
   }
 
 
