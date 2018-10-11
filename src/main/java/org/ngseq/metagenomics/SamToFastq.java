@@ -48,6 +48,8 @@ public class SamToFastq {
 
     JavaPairRDD<Text, SequencedFragment> fastqRDD = bamRDD.mapToPair(read -> {
 
+
+
       String name = read.getReadName();
       if(read.getReadPairedFlag()){
         if(read.getFirstOfPairFlag())

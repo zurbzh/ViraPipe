@@ -27,6 +27,7 @@ public class MergeFastq {
 
         JavaPairRDD<Text, SequencedFragment> fastqRDD = sc.newAPIHadoopFile(args[0], FastqInputFormat.class, Text.class, SequencedFragment.class, sc.hadoopConfiguration());
 
+
         JavaPairRDD<Text, SequencedFragment> coalesced = fastqRDD.coalesce(Integer.valueOf(args[2]));
 
         coalesced.saveAsNewAPIHadoopFile(args[1], Text.class, SequencedFragment.class, FastqOutputFormat.class, sc.hadoopConfiguration());
